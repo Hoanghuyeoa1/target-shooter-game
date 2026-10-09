@@ -1,0 +1,722 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;900&family=Share+Tech+Mono&display=swap');
+
+:root {
+  --bg-color: #0b0f19;
+  --panel-bg: rgba(13, 20, 36, 0.75);
+  --panel-border: rgba(0, 240, 255, 0.25);
+  --cyan-glow: #00f0ff;
+  --amber-glow: #ffb703;
+  --red-glow: #ff2a5f;
+  --green-glow: #00ff88;
+  --text-main: #f0f6fc;
+  --text-muted: #8b949e;
+  --font-hud: 'Share Tech Mono', monospace;
+  --font-main: 'Outfit', sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-color);
+  font-family: var(--font-main);
+  color: var(--text-main);
+  cursor: none; /* Custom crosshair is rendered on canvas / HUD */
+}
+
+#app-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Canvas Layer */
+#gameCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  display: block;
+}
+
+/* Screen Recoil / Shake wrapper */
+.screen-shake {
+  animation: recoilShake 0.08s ease-out;
+}
+
+@keyframes recoilShake {
+  0% { transform: translate(0, 0); }
+  30% { transform: translate(-2px, -6px); }
+  70% { transform: translate(2px, 3px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* Fullscreen Muzzle Flash Overlay */
+#muzzleFlash {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+  background: radial-gradient(circle at 65% 85%, rgba(255, 230, 160, 0.45) 0%, rgba(255, 120, 0, 0.15) 30%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.04s ease-out;
+}
+
+/* Optical Sniper Scope HUD */
+/* 1. Sửa đoạn #sniperScopeOverlay: Bỏ thuộc tính flex căn giữa */
+#sniperScopeOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 15;
+  opacity: 0;
+  transition: opacity 0.15s ease-out;
+  /* Đã bỏ flexbox căn giữa để con trỏ tự do di chuyển */
+}
+
+#sniperScopeOverlay.active {
+  opacity: 1;
+}
+
+/* 2. Thêm cấu hình này ngay bên dưới để tâm ngắm và viền kính trượt theo chuột */
+#sniperScopeOverlay .scope-reticle,
+#sniperScopeOverlay .scope-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%); /* Căn tâm vòng tròn đúng ngay đầu con trỏ chuột */
+  pointer-events: none;
+  will-change: left, top;
+}
+
+/* Scope Vignette Mask */
+.scope-mask {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, transparent 280px, rgba(0, 5, 12, 0.96) 380px, #00040a 100%);
+  box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.95);
+}
+
+.scope-reticle {
+  position: absolute;
+  width: 560px;
+  height: 560px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 240, 255, 0.6);
+  box-shadow: 0 0 25px rgba(0, 240, 255, 0.25), inset 0 0 20px rgba(0, 240, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scope-line-h {
+  position: absolute;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(0, 240, 255, 0.8), #00f0ff, rgba(0, 240, 255, 0.8));
+}
+
+.scope-line-v {
+  position: absolute;
+  height: 100%;
+  width: 1px;
+  background: linear-gradient(180deg, rgba(0, 240, 255, 0.8), #00f0ff, rgba(0, 240, 255, 0.8));
+}
+
+.scope-mil-dots {
+  position: absolute;
+  width: 280px;
+  height: 280px;
+  border: 1px dashed rgba(0, 240, 255, 0.4);
+  border-radius: 50%;
+}
+
+.scope-readout {
+  position: absolute;
+  bottom: 40px;
+  font-family: var(--font-hud);
+  font-size: 14px;
+  color: #00f0ff;
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px #00f0ff;
+}
+
+/* DMR Mild ADS Vignette */
+#dmrVignette {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 14;
+  opacity: 0;
+  transition: opacity 0.12s ease-out;
+  background: radial-gradient(circle at center, transparent 40%, rgba(0, 10, 25, 0.75) 90%);
+}
+
+#dmrVignette.active {
+  opacity: 1;
+}
+
+/* UI Overlay Container */
+#hudOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px 32px;
+}
+
+/* TOP BAR: Score, Timer, Combo */
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.hud-card {
+  background: var(--panel-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 12px 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(0, 240, 255, 0.05);
+}
+
+.score-display {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hud-label {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.score-value {
+  font-family: var(--font-hud);
+  font-size: 34px;
+  font-weight: 700;
+  color: #ffffff;
+  text-shadow: 0 0 12px var(--cyan-glow);
+}
+
+/* Timer Center Display */
+.timer-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 180px;
+}
+
+.timer-value {
+  font-family: var(--font-hud);
+  font-size: 40px;
+  font-weight: 900;
+  color: var(--cyan-glow);
+  text-shadow: 0 0 16px rgba(0, 240, 255, 0.7);
+  letter-spacing: 1px;
+}
+
+.timer-value.danger {
+  color: var(--red-glow);
+  text-shadow: 0 0 20px rgba(255, 42, 95, 0.9);
+  animation: timerPulse 0.6s infinite alternate;
+}
+
+@keyframes timerPulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.08); }
+}
+
+/* Combo Streak Display */
+.combo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 160px;
+}
+
+.combo-value {
+  font-family: var(--font-hud);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--amber-glow);
+  text-shadow: 0 0 12px rgba(255, 183, 3, 0.8);
+}
+
+.combo-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.combo-bar-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #ffb703, #ff4444);
+  box-shadow: 0 0 8px var(--amber-glow);
+  transition: width 0.08s linear;
+}
+
+/* Dynamic Crosshair Container */
+#crosshairContainer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 20;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Crosshair Reticles */
+.reticle {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Hitmarker Visual Indicator */
+#hitmarkerUI {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.05s ease-out, transform 0.08s ease-out;
+}
+
+#hitmarkerUI.active {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+#hitmarkerUI.bullseye {
+  opacity: 1;
+  transform: scale(1.4);
+}
+
+.hm-line {
+  position: absolute;
+  background: #ffffff;
+  box-shadow: 0 0 6px #ffffff;
+}
+
+#hitmarkerUI.bullseye .hm-line {
+  background: #ff2a5f;
+  box-shadow: 0 0 12px #ff2a5f;
+}
+
+.hm-1 { top: 0; left: 0; width: 8px; height: 2px; transform: rotate(45deg); transform-origin: top left; }
+.hm-2 { top: 0; right: 0; width: 8px; height: 2px; transform: rotate(-45deg); transform-origin: top right; }
+.hm-3 { bottom: 0; left: 0; width: 8px; height: 2px; transform: rotate(-45deg); transform-origin: bottom left; }
+.hm-4 { bottom: 0; right: 0; width: 8px; height: 2px; transform: rotate(45deg); transform-origin: bottom right; }
+
+/* BOTTOM SECTION: Weapon Hotbar & Ammo status */
+.bottom-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+}
+
+/* Quick Hotbar 1-5 */
+.hotbar {
+  display: flex;
+  gap: 12px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 14px;
+  padding: 8px 12px;
+}
+
+.weapon-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  min-width: 86px;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.weapon-slot.active {
+  background: rgba(0, 240, 255, 0.15);
+  border-color: var(--cyan-glow);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.4), inset 0 0 8px rgba(0, 240, 255, 0.2);
+  transform: translateY(-4px);
+}
+
+.slot-key {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--cyan-glow);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.slot-icon {
+  font-size: 22px;
+  margin-bottom: 2px;
+}
+
+.slot-name {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-main);
+}
+
+.slot-ammo {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.weapon-slot.active .slot-ammo {
+  color: var(--cyan-glow);
+}
+
+/* Active Ammo & Reload HUD (Right) */
+.ammo-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 220px;
+}
+
+.ammo-counts {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.ammo-current {
+  font-family: var(--font-hud);
+  font-size: 52px;
+  font-weight: 900;
+  line-height: 1;
+  color: #ffffff;
+  text-shadow: 0 0 14px var(--cyan-glow);
+}
+
+.ammo-current.low {
+  color: var(--red-glow);
+  text-shadow: 0 0 18px var(--red-glow);
+  animation: timerPulse 0.5s infinite alternate;
+}
+
+.ammo-divider {
+  font-family: var(--font-hud);
+  font-size: 24px;
+  color: var(--text-muted);
+}
+
+.ammo-max {
+  font-family: var(--font-hud);
+  font-size: 24px;
+  color: var(--text-muted);
+}
+
+.reload-status {
+  font-family: var(--font-hud);
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  color: var(--amber-glow);
+  height: 18px;
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
+.reload-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  margin-top: 6px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.reload-progress-bar.active {
+  opacity: 1;
+}
+
+.reload-bar-fill {
+  width: 0%;
+  height: 100%;
+  background: var(--amber-glow);
+  box-shadow: 0 0 8px var(--amber-glow);
+  transition: width 0.05s linear;
+}
+
+/* Controls Cheat Sheet (Bottom Left) */
+.controls-hint {
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-hud);
+}
+
+.hint-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hint-key {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* MODALS: Start Game & Match Summary */
+.modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(4, 8, 16, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.25s ease-out;
+}
+
+.modal-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modal-box {
+  background: linear-gradient(145deg, rgba(16, 24, 45, 0.95), rgba(9, 14, 28, 0.98));
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.8), 0 0 40px rgba(0, 240, 255, 0.15);
+  border-radius: 20px;
+  width: 90%;
+  max-width: 650px;
+  padding: 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  animation: modalEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: default;
+}
+
+@keyframes modalEnter {
+  from { transform: scale(0.92) translateY(20px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.modal-title {
+  font-size: 32px;
+  font-weight: 900;
+  text-align: center;
+  letter-spacing: 1px;
+  background: linear-gradient(90deg, #ffffff, var(--cyan-glow));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-transform: uppercase;
+}
+
+.modal-subtitle {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-top: -16px;
+}
+
+/* Mode Selection Pills */
+.mode-toggle-group {
+  display: flex;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 6px;
+  border-radius: 12px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-main);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-btn.active {
+  background: rgba(0, 240, 255, 0.2);
+  color: var(--cyan-glow);
+  border: 1px solid var(--cyan-glow);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.3);
+}
+
+/* Stats Grid in Summary Modal */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.stat-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+}
+
+.stat-label {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.stat-val {
+  font-family: var(--font-hud);
+  font-size: 26px;
+  font-weight: 700;
+  color: #fff;
+  margin-top: 4px;
+}
+
+.stat-val.highlight {
+  color: var(--cyan-glow);
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
+}
+
+.stat-val.accent {
+  color: var(--amber-glow);
+  text-shadow: 0 0 10px rgba(255, 183, 3, 0.6);
+}
+
+/* Rank Badge */
+.rank-badge-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 14px;
+  background: rgba(0, 240, 255, 0.06);
+  border-radius: 14px;
+  border: 1px dashed var(--panel-border);
+}
+
+.rank-badge {
+  font-family: var(--font-hud);
+  font-size: 48px;
+  font-weight: 900;
+  color: var(--amber-glow);
+  text-shadow: 0 0 24px var(--amber-glow);
+  padding: 4px 16px;
+  border-radius: 10px;
+  background: rgba(255, 183, 3, 0.15);
+  border: 2px solid var(--amber-glow);
+}
+
+.rank-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rank-title {
+  font-weight: 700;
+  font-size: 18px;
+  color: #fff;
+}
+
+.rank-mvp {
+  font-size: 13px;
+  color: var(--cyan-glow);
+  font-family: var(--font-hud);
+}
+
+/* Primary Action Buttons */
+.btn-primary {
+  background: linear-gradient(135deg, #00f0ff, #0088ff);
+  border: none;
+  border-radius: 12px;
+  color: #040810;
+  font-family: var(--font-main);
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  padding: 16px 28px;
+  cursor: pointer;
+  text-transform: uppercase;
+  box-shadow: 0 8px 24px rgba(0, 240, 255, 0.4);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(0, 240, 255, 0.6);
+  filter: brightness(1.1);
+}
+
+.btn-primary:active {
+  transform: translateY(1px);
+}

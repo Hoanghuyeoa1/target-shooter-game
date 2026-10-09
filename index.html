@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Target Master 2.5D - First-Person Shooting Range</title>
+  <meta name="description" content="Mini-game bắn bia góc nhìn thứ nhất (First-Person Target Shooting) chạy trên trình duyệt với HTML5 Canvas, Web Audio API và 5 loại vũ khí chuyên biệt." />
+  <link rel="stylesheet" href="/src/styles/main.css" />
+</head>
+<body>
+  <div id="app-container">
+    <!-- Main Simulation Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Muzzle Flash Lighting Effect -->
+    <div id="muzzleFlash"></div>
+
+    <!-- DMR ADS Vignette -->
+    <div id="dmrVignette"></div>
+
+    <!-- Fullscreen Sniper Optical Scope HUD -->
+    <div id="sniperScopeOverlay">
+      <div class="scope-mask"></div>
+      <div class="scope-reticle">
+        <div class="scope-line-h"></div>
+        <div class="scope-line-v"></div>
+        <div class="scope-mil-dots"></div>
+        <div class="scope-readout">OPTICAL 3.5X | CAL .50 MAGNUM</div>
+      </div>
+    </div>
+
+    <!-- Crosshair & Reticle Canvas (Always on Top) -->
+    <canvas id="crosshairCanvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 25;"></canvas>
+
+    <!-- Hitmarker Flash Marker -->
+    <div id="hitmarkerUI" style="position: absolute; transform: translate(-50%, -50%); z-index: 30;">
+      <div class="hm-line hm-1"></div>
+      <div class="hm-line hm-2"></div>
+      <div class="hm-line hm-3"></div>
+      <div class="hm-line hm-4"></div>
+    </div>
+
+    <!-- Tactical Glassmorphism HUD Overlay -->
+    <div id="hudOverlay">
+      <!-- Top Bar: Score, Timer, Combo Streak -->
+      <header class="top-bar">
+        <div class="hud-card score-display">
+          <span class="hud-label">TỔNG ĐIỂM</span>
+          <span id="scoreVal" class="score-value">0</span>
+        </div>
+
+        <div class="hud-card timer-container">
+          <span class="hud-label">THỜI GIAN CÒN LẠI</span>
+          <span id="timerVal" class="timer-value">01:00</span>
+        </div>
+
+        <div class="hud-card combo-container">
+          <span class="hud-label">CHUỖI BẮN (COMBO)</span>
+          <span id="comboVal" class="combo-value">x1.0</span>
+          <div class="combo-bar-bg">
+            <div id="comboBarFill" class="combo-bar-fill"></div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Bottom Bar: Controls, Hotbar 1-5, Ammo -->
+      <footer class="bottom-bar">
+        <!-- Controls Cheat Sheet -->
+        <div class="controls-hint">
+          <div class="hint-item"><span class="hint-key">LMB</span> Bắn / Ném</div>
+          <div class="hint-item"><span class="hint-key">RMB</span> Ngắm (DMR/Sniper)</div>
+          <div class="hint-item"><span class="hint-key">R</span> Nạp đạn</div>
+          <div class="hint-item"><span class="hint-key">1-5 / Cuộn</span> Đổi vũ khí</div>
+        </div>
+
+        <!-- Hotbar Slots (Phím 1-5) -->
+        <nav class="hotbar" aria-label="Weapon Arsenal">
+          <div class="weapon-slot" id="slot-1" title="Phím 1: Dao Phóng">
+            <span class="slot-key">1</span>
+            <span class="slot-icon">🗡️</span>
+            <span class="slot-name">Dao Phóng</span>
+            <span class="slot-ammo">∞</span>
+          </div>
+
+          <div class="weapon-slot active" id="slot-2" title="Phím 2: Súng Lục Tactical">
+            <span class="slot-key">2</span>
+            <span class="slot-icon">🔫</span>
+            <span class="slot-name">Pistol</span>
+            <span class="slot-ammo">12/12</span>
+          </div>
+
+          <div class="weapon-slot" id="slot-3" title="Phím 3: Súng Trường Tấn Công (Full-Auto)">
+            <span class="slot-key">3</span>
+            <span class="slot-icon">⚡</span>
+            <span class="slot-name">AR-47 Spear</span>
+            <span class="slot-ammo">30/30</span>
+          </div>
+
+          <div class="weapon-slot" id="slot-4" title="Phím 4: Súng DMR Bán Tự Động (Zoom)">
+            <span class="slot-key">4</span>
+            <span class="slot-icon">🎯</span>
+            <span class="slot-name">MK-14 DMR</span>
+            <span class="slot-ammo">10/10</span>
+          </div>
+
+          <div class="weapon-slot" id="slot-5" title="Phím 5: Súng Ngắm Tỉa Sniper (Bolt-Action)">
+            <span class="slot-key">5</span>
+            <span class="slot-icon">🔭</span>
+            <span class="slot-name">AWM Sniper</span>
+            <span class="slot-ammo">5/5</span>
+          </div>
+        </nav>
+
+        <!-- Current Ammo & Reload Progress -->
+        <div class="hud-card ammo-container">
+          <div class="ammo-counts">
+            <span id="ammoCurrent" class="ammo-current">12</span>
+            <span class="ammo-divider">/</span>
+            <span id="ammoMax" class="ammo-max">12</span>
+          </div>
+          <div id="reloadStatus" class="reload-status">Súng Lục Tactical</div>
+          <div id="reloadProgressBar" class="reload-progress-bar">
+            <div id="reloadBarFill" class="reload-bar-fill"></div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Start Game Modal Overlay -->
+    <div id="startModal" class="modal-overlay">
+      <div class="modal-box">
+        <h1 class="modal-title">🎯 TRƯỜNG BẮN CHIẾN THUẬT 2.5D</h1>
+        <p class="modal-subtitle">First-Person Tactical Target Shooting Range</p>
+
+        <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #cbd5e0; background: rgba(0,0,0,0.3); padding: 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
+          <div><strong>🗡️ Phím 1 - Dao Phóng:</strong> Đạn đạo vật lý có độ trễ & trọng lực rơi nhẹ. Vô hạn dao (hồi 0.8s).</div>
+          <div><strong>🔫 Phím 2 - Pistol:</strong> Bán tự động, hitscan tức thời, độ giật thấp, băng 12 viên.</div>
+          <div><strong>⚡ Phím 3 - Assault Rifle:</strong> Giữ chuột trái xả đạn liên thanh 600 RPM, tản đạn & giật, băng 30 viên.</div>
+          <div><strong>🎯 Phím 4 - DMR:</strong> Bán tự động uy lực mạnh, chuột phải zoom quang học 1.5x, băng 10 viên.</div>
+          <div><strong>🔭 Phím 5 - Sniper Rifle:</strong> Bắn bolt-action nạp từng viên 1.5s, chuột phải bật kính ngắm ngắm tỉa chuyên dụng che mờ viền.</div>
+          <div><strong>🔴 Bia Tính Điểm:</strong> Hồng tâm (10 điểm), Vòng trong (8đ), Giữa (5đ), Ngoài (2đ). Bắn chuẩn tạo Combo x1.5 đến x4!</div>
+        </div>
+
+        <div style="display: flex; gap: 16px; margin-top: 8px;">
+          <button id="startChallengeBtn" class="btn-primary" style="flex: 1.2;">BẮT ĐẦU THỬ THÁCH (60S)</button>
+          <button id="startPracticeBtn" class="btn-primary" style="flex: 1; background: linear-gradient(135deg, #4a5568, #2d3748); box-shadow: none;">TẬP LUYỆN TỰ DO</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- End of Match Summary Modal Overlay -->
+    <div id="summaryModal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <h2 class="modal-title">KẾT QUẢ TRẬN ĐẤU</h2>
+        <p class="modal-subtitle">Báo cáo hiệu suất xạ thủ trường bắn</p>
+
+        <!-- Rank & MVP Weapon -->
+        <div class="rank-badge-container">
+          <div id="summaryRank" class="rank-badge">S</div>
+          <div class="rank-details">
+            <div class="rank-title">XẾP HẠNG XẠ THỦ</div>
+            <div id="summaryMvp" class="rank-mvp">Vũ khí xuất sắc nhất: Pistol</div>
+          </div>
+        </div>
+
+        <!-- Detailed Statistics Grid -->
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-label">TỔNG ĐIỂM</div>
+            <div id="summaryScore" class="stat-val highlight">0</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">ĐỘ CHÍNH XÁC</div>
+            <div id="summaryAccuracy" class="stat-val">0.0%</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">TRÚNG HỒNG TÂM (BULLSEYE)</div>
+            <div id="summaryBullseyes" class="stat-val accent">0 (0%)</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">TỔNG PHÁT BẮN</div>
+            <div id="summaryShots" class="stat-val">0</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">COMBO CAO NHẤT</div>
+            <div id="summaryMaxCombo" class="stat-val accent">x1.0</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">THỜI GIAN</div>
+            <div class="stat-val">60 Giây</div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div style="display: flex; gap: 16px; margin-top: 8px;">
+          <button id="playAgainBtn" class="btn-primary" style="flex: 1.2;">THỬ THÁCH LẠI (60S)</button>
+          <button id="practiceAgainBtn" class="btn-primary" style="flex: 1; background: linear-gradient(135deg, #4a5568, #2d3748); box-shadow: none;">TẬP LUYỆN TỰ DO</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Entry Point -->
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
